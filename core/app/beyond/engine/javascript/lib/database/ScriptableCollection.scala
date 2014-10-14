@@ -20,6 +20,7 @@ import reactivemongo.core.commands.LastError
 import reactivemongo.core.commands.Remove
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+import scalaz.syntax.std.boolean._
 
 object ScriptableCollection {
   @JSFunctionAnnotation
@@ -148,7 +149,8 @@ object ScriptableCollection {
     val beyondContextFactory = context.getFactory.asInstanceOf[BeyondContextFactory]
     val thisCollection = thisObj.asInstanceOf[ScriptableCollection]
     val dataToUpdate = args(0).asInstanceOf[ScriptableDocument]
-    val saveQueryResult = thisCollection.saveInternal(dataToUpdate)
+    val diffOnly = (args.length == 2) ? ScriptRuntime.toBoolean(args(1)) | false
+    val saveQueryResult = thisCollection.saveInternal(dataToUpdate, diffOnly)
 
     import com.beyondframework.rhino.RhinoConversions._
     val scriptableDocument = saveQueryResult.map { document =>
@@ -221,9 +223,9 @@ class ScriptableCollection(name: String, schema: ScriptableSchema) extends Scrip
     collection.remove(query.query, firstMatchOnly = firstMatchOnly)
 
   // Cannot use name 'save', because static forwarder is not generated when the companion object and class have the same name method.
-  private def saveInternal(dataToBeUpdated: ScriptableDocument)(implicit ec: ExecutionContext): Future[BSONDocument] = {
+  private def saveInternal(dataToBeUpdated: ScriptableDocument, diffOnly: Boolean)(implicit ec: ExecutionContext): Future[BSONDocument] = {
     val objectID = BSONDocument("_id" -> dataToBeUpdated.objectID)
-    val modifier = BSONDocument("$set" -> dataToBeUpdated.modifier)
+    val modifier = BSONDocument("$set" -> dataToBeUpdated.modifier(diffOnly))
     if (modifier.isEmpty) {
       Future.successful(dataToBeUpdated.currentBSONDocument)
     } else if (validateDocument(dataToBeUpdated.currentBSONDocument)) {

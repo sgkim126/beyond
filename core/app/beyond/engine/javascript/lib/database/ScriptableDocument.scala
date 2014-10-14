@@ -48,8 +48,16 @@ class ScriptableDocument(fields: Seq[Field], currentValuesInDB: BSONDocument, co
   private val updatedValues: UpdatedValueTable = emptyUpdatedValueTable
   private val fieldsAccessors: MutableMap[Int, Callable] = MutableMap.empty[Int, Callable]
 
-  def modifier: BSONDocument =
-    BSONDocument(updatedValues)
+  def modifier(diffOnly: Boolean): BSONDocument =
+    if (diffOnly) {
+      val filteredValues = updatedValues.filter {
+        case (name, value) =>
+          currentValuesInDB.get(name).map(_ != value).getOrElse(true)
+      }
+      BSONDocument(filteredValues)
+    } else {
+      BSONDocument(updatedValues)
+    }
 
   val objectIDOption: Option[BSONObjectID] =
     currentValuesInDB.getAs[BSONObjectID]("_id")
@@ -130,7 +138,7 @@ class ScriptableDocument(fields: Seq[Field], currentValuesInDB: BSONDocument, co
   }
 
   def currentBSONDocument: BSONDocument = {
-    val modifiedDocument = modifier
+    val modifiedDocument = modifier(diffOnly = false)
     val currentElements = currentValuesInDB.elements.filter {
       case (key, _) =>
         modifiedDocument.get(key) == None
